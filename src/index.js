@@ -14,13 +14,18 @@
 export default function maybeExtendPromise(Promise) {
   // Make idempotent, so we don't layer on top of a BasePromise that
   // is adequate.
-  if (typeof Promise.makeHandled === 'function') {
+  if (
+    typeof Promise.makeHandled === 'function' &&
+    typeof Promise.antiResolve === 'function'
+  ) {
     return Promise;
   }
 
   const presenceToHandler = new WeakMap();
   const presenceToPromise = new WeakMap();
   const promiseToHandler = new WeakMap();
+  // Only to support antiResolve
+  const promiseToPresence = new WeakMap();
 
   // This special handler accepts Promises, and forwards
   // handled Promises to their corresponding fulfilledHandler.
@@ -100,6 +105,28 @@ export default function maybeExtendPromise(Promise) {
           return handledPromise;
         }
         return baseResolve(value);
+      },
+
+      // TODO bikeshed name and where to put it. Better would probably
+      // be to make it an export of this module, but this is somewhat
+      // in tension with the don't-patch-if-idempotent test at the
+      // beginning of maybeExtendPromise.
+      //
+      // TODO verify that this is safe to provide universally, i.e.,
+      // that by itself it doesn't provide access to mutable state in
+      // ways that violate normal ocap module purity rules. The claim
+      // that it does not rests on the handled promise itself being
+      // necessary to perceive this mutable state. In that sense, we
+      // can think of the right to perceive it, and of access to the
+      // target, as being in the handled promise. Note that a .then on
+      // the handled promise will already provide async access to the
+      // target, so the only additional authorities are: 1)
+      // synchronous access for handled promises only, and thus 2) the
+      // ability to tell, from the client side, whether a promise is
+      // handled. Or, at least, the ability to tell given that the
+      // promise is already fulfilled.
+      antiResolve(promise) {
+        return promiseToPresence.get(promise);
       },
 
       makeHandled(executor, unfulfilledHandler = undefined) {
@@ -188,6 +215,7 @@ export default function maybeExtendPromise(Promise) {
               const existingFulfilledHandler = presenceToHandler.get(presence);
               if (existingFulfilledHandler) {
                 promiseToHandler.set(handledP, existingFulfilledHandler);
+                promiseToPresence.set(handledP, presence);
                 return continueForwarding();
               }
 
@@ -217,6 +245,7 @@ export default function maybeExtendPromise(Promise) {
               // fulfilledHandler.
               presenceToPromise.set(presence, handledP);
               presenceToHandler.set(presence, fulfilledHandler);
+              promiseToPresence.set(handledP, presence);
             }
 
             // Remove the mapping, as our fulfilledHandler should be
