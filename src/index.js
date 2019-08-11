@@ -125,8 +125,8 @@ export default function maybeExtendPromise(Promise) {
       // ability to tell, from the client side, whether a promise is
       // handled. Or, at least, the ability to tell given that the
       // promise is already fulfilled.
-      antiResolve(promise) {
-        return promiseToPresence.get(promise);
+      antiResolve(value) {
+        return promiseToPresence.get(Promise.resolve(value));
       },
 
       makeHandled(executor, unfulfilledHandler = undefined) {
