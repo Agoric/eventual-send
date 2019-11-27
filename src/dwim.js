@@ -3,7 +3,7 @@ import { HandledPromise } from '.';
 const harden = Object.freeze;
 
 /*
-Do-What-I-Mean eventual send proxy
+Do-What-I-Mean eventual send chain proxy
 
 If we ever do `.then` on a DWIM proxy, it behaves as if it were
 a Thenable for the result thus far.
@@ -22,61 +22,65 @@ ordinarily want to do that right away.
 
 TODO: Proper hardening and read-only invariants.
 */
-export default function DWIM(x) {
-  return new Proxy(harden({}), {
-    has(_target, p) {
-      // Always just a Thenable.
-      return p === 'then';
-    },
-    set(_target, _p, _value, _receiver) {
-      // Immutable.
-      return false;
-    },
-    deleteProperty(_target, _p) {
-      return false;
-    },
-    apply(_target, _thisArg, argArray = undefined) {
-      // Anonymous function application.
-      return DWIM(HandledPromise.applyFunction(x, argArray));
-    },
-    get(_target, p, _receiver) {
-      if (p === 'then') {
-        // Register callbacks on our chain.
-        return (...args) => Promise.resolve(x).then(...args);
-      }
-      // eslint-disable-next-line no-use-before-define
-      return DWIMPeek(x, p);
-    },
-  });
-}
 
-function DWIMPeek(x, propName) {
-  return new Proxy(harden(() => {}), {
-    has(_target, p) {
-      // We ensure thenability.
-      return p === 'then';
-    },
-    apply(_target, thisArg, argArray = undefined) {
-      if (!thisArg) {
-        // Property get followed by function call.
-        return DWIM(
-          HandledPromise.applyFunction(
-            HandledPromise.get(x, propName),
-            argArray,
-          ),
-        );
-      }
-      // Convert to a method call.
-      return DWIM(HandledPromise.applyMethod(x, propName, argArray));
-    },
-    get(_target, p, _receiver) {
-      // Commit to looking up propName.
-      if (p === 'then') {
-        // Provide Thenable for propName.
-        return (...args) => HandledPromise.get(x, propName).then(...args);
-      }
-      // Continue the chain with a new propName.
-      return DWIMPeek(HandledPromise.get(x, propName), p);
-    },
-  });
+export default function DWIM(x, parentProp = undefined) {
+  const t = () => {};
+  t.toString = harden(() => `[DWIM Proxy]`);
+  return harden(
+    new Proxy(harden(t), {
+      apply(_target, thisArg, argArray = undefined) {
+        // Anonymous function application.
+        if (parentProp === undefined) {
+          return DWIM(HandledPromise.applyFunction(x, argArray));
+        }
+
+        if (!thisArg) {
+          // Property get followed by function call.
+          return DWIM(
+            HandledPromise.applyFunction(
+              HandledPromise.get(x, parentProp),
+              argArray,
+            ),
+          );
+        }
+
+        // Aggregate as a method call.
+        return DWIM(HandledPromise.applyMethod(x, parentProp, argArray));
+      },
+      get(target, p, _receiver) {
+        if (p === 'then') {
+          if (parentProp === undefined) {
+            // Just provide a thenable.
+            return harden((...args) => Promise.resolve(x).then(...args));
+          }
+          // Commit to getting the parent property.
+          return harden((...args) =>
+            HandledPromise.get(x, parentProp).then(...args),
+          );
+        }
+
+        // We act enough like a function that prototype methods are not
+        // forwarded.
+        const val = Reflect.get(target, p);
+        if (typeof p === 'symbol' || typeof val === 'function') {
+          return val;
+        }
+
+        // Not a method, so use as a property to peek further.
+        const x2 =
+          parentProp === undefined ? x : HandledPromise.get(x, parentProp);
+        return DWIM(x2, p);
+      },
+      has(_target, p) {
+        // We ensure thenability.
+        return p === 'then';
+      },
+      enumerate(_target) {
+        return ['then'];
+      },
+      deleteProperty(_target, _prop) {
+        return false;
+      },
+    }),
+  );
 }

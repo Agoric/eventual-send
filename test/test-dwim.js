@@ -18,7 +18,7 @@ test('DWIM method calls', async t => {
   }
 });
 
-test('DWIM shortcuts', async t => {
+test('DWIM chains', async t => {
   try {
     const x = {
       name: 'buddy',
@@ -42,27 +42,32 @@ test('DWIM shortcuts', async t => {
   }
 });
 
-test('E chains', async t => {
+test('DWIM readonly', async t => {
   try {
-    const x = {
-      name: 'buddy',
-      val: 123,
-      y: Object.freeze({
-        val2: 456,
-        name2: 'holly',
-        fn: n => 2 * n,
-      }),
-      hello(greeting) {
-        return `${greeting}, ${this.name}!`;
-      },
-    };
-    const xC = E(x);
-    t.equal(await xC.hello('Hello'), 'Hello, buddy!', 'method call works');
-    t.equal(await (1, xC.y.fn)(4), 8, 'anonymous method works');
-    t.equal(await xC.val, 123, 'property get');
+    const a1 = E({});
+    // eslint-disable-next-line new-cap
+    t.throws(() => new a1(), TypeError, 'cannot construct');
+    t.isNot(+a1, +a1, 'no valueof intercept');
+    t.equals(String(a1), '[DWIM Proxy]', 'no toString intercept');
+    t.equals(`${a1}`, '[DWIM Proxy]', 'no string tag intercept');
+    t.throws(() => (a1.foo = 'bar'), 'assignment fails');
+    t.assert(!Reflect.setPrototypeOf(a1, Array), 'set prototype fails');
+    t.assert(!Object.isExtensible(a1), 'not extensible');
+    t.throws(() => delete a1.then, 'delete fails');
+
+    const a2 = a1.fooBar;
+    t.throws(() => new a2(), TypeError, 'cannot construct');
+    t.isNot(+a2, +a2, 'no valueof intercept');
+    t.equals(String(a2), '[DWIM Proxy]', 'no toString intercept');
+    t.equals(`${a2}`, '[DWIM Proxy]', 'no string tag intercept');
+    t.throws(() => (a2.foo = 'bar'), 'assignment fails');
+    t.assert(!Reflect.setPrototypeOf(a2, Array), 'set prototype fails');
+    t.assert(!Object.isExtensible(a2), 'not extensible');
+    t.throws(() => delete a2.then, 'delete fails');
   } catch (e) {
     t.isNot(e, e, 'unexpected exception');
   } finally {
     t.end();
   }
 });
+
