@@ -23,7 +23,7 @@ ordinarily want to do that right away.
 TODO: Proper hardening and read-only invariants.
 */
 
-export default harden(function EC(x, parentProp = undefined) {
+export default harden(function EC(parent, parentProp = undefined) {
   const t = () => {};
   t.toString = harden(() => `[Eventual Chain]`);
   return harden(
@@ -31,31 +31,31 @@ export default harden(function EC(x, parentProp = undefined) {
       apply(_target, thisArg, argArray = undefined) {
         // Anonymous function application.
         if (parentProp === undefined) {
-          return EC(HandledPromise.applyFunction(x, argArray));
+          return EC(HandledPromise.applyFunction(parent, argArray));
         }
 
         if (!thisArg) {
           // Property get followed by function call.
           return EC(
             HandledPromise.applyFunction(
-              HandledPromise.get(x, parentProp),
+              HandledPromise.get(parent, parentProp),
               argArray,
             ),
           );
         }
 
         // Aggregate as a method call.
-        return EC(HandledPromise.applyMethod(x, parentProp, argArray));
+        return EC(HandledPromise.applyMethod(parent, parentProp, argArray));
       },
       get(target, p, _receiver) {
         if (p === 'then') {
           if (parentProp === undefined) {
             // Just provide a thenable.
-            return harden((...args) => Promise.resolve(x).then(...args));
+            return harden((...args) => Promise.resolve(parent).then(...args));
           }
           // Commit to getting the parent property.
           return harden((...args) =>
-            HandledPromise.get(x, parentProp).then(...args),
+            HandledPromise.get(parent, parentProp).then(...args),
           );
         }
 
@@ -65,9 +65,11 @@ export default harden(function EC(x, parentProp = undefined) {
         }
 
         // Not a method, so use as a property to peek further.
-        const x2 =
-          parentProp === undefined ? x : HandledPromise.get(x, parentProp);
-        return EC(x2, p);
+        const newParent =
+          parentProp === undefined
+            ? parent
+            : HandledPromise.get(parent, parentProp);
+        return EC(newParent, p);
       },
       has(_target, p) {
         // We ensure thenability.

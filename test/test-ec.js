@@ -32,9 +32,15 @@ test('EC chains', async t => {
         return `${greeting}, ${this.name}!`;
       },
     };
-    t.equal(await EC(x).hello('Hello'), 'Hello, buddy!', 'method call works');
-    t.equal(await (1, EC(x).y.fn)(4), 8, 'anonymous method works');
-    t.equal(await EC(x).val, 123, 'property get');
+    const h = EC(x).hello('Hello');
+    t.equal(typeof h.then, 'function', 'method call is thenable');
+    t.equal(await h, 'Hello, buddy!', 'method call works');
+    const a = (1, EC(x).y.fn)(4);
+    t.equal(typeof a.then, 'function', 'anonymous method is thenable');
+    t.equal(await a, 8, 'anonymous method works');
+    const v = EC(x).val;
+    t.equal(typeof v.then, 'function', 'property get is thenable');
+    t.equal(await v, 123, 'property get');
   } catch (e) {
     t.isNot(e, e, 'unexpected exception');
   } finally {
