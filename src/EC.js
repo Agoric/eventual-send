@@ -1,6 +1,14 @@
+/* global globalThis window */
+/* eslint-disable no-use-before-define */
 import { HandledPromise } from '.';
 
-const harden = Object.freeze;
+// Shim globalThis when we don't have it.
+if (typeof globalThis === 'undefined') {
+  const myGlobal = typeof window === 'undefined' ? global : window;
+  myGlobal.globalThis = myGlobal;
+}
+
+const harden = (globalThis.SES && globalThis.SES.harden) || Object.freeze;
 
 /*
 Do-What-I-Mean eventual send chain proxy
@@ -23,64 +31,70 @@ ordinarily want to do that right away.
 TODO: Proper hardening and read-only invariants.
 */
 
-export default harden(function EC(parent, parentProp = undefined) {
-  const t = () => {};
-  t.toString = harden(() => `[Eventual Chain]`);
-  return harden(
-    new Proxy(harden(t), {
-      apply(_target, thisArg, argArray = undefined) {
-        // Anonymous function application.
-        if (parentProp === undefined) {
-          return EC(HandledPromise.applyFunction(parent, argArray));
-        }
+const makeEC = peek =>
+  harden((parent, peekingProp = undefined) => {
+    const t = () => {};
+    t.toString = harden(() => `[Eventual Chain]`);
+    return harden(
+      new Proxy(harden(t), {
+        apply(_target, thisArg, argArray = undefined) {
+          // Anonymous function application.
+          if (!peek) {
+            return EC(HandledPromise.applyFunction(parent, argArray));
+          }
 
-        if (!thisArg) {
-          // Property get followed by function call.
-          return EC(
-            HandledPromise.applyFunction(
-              HandledPromise.get(parent, parentProp),
-              argArray,
-            ),
-          );
-        }
+          if (!thisArg) {
+            // Property get followed by function call.
+            return EC(
+              HandledPromise.applyFunction(
+                HandledPromise.get(parent, peekingProp),
+                argArray,
+              ),
+            );
+          }
 
-        // Aggregate as a method call.
-        return EC(HandledPromise.applyMethod(parent, parentProp, argArray));
-      },
-      get(target, p, _receiver) {
-        if (p === 'then') {
-          if (parentProp === undefined) {
+          // Aggregate as a method call.
+          return EC(HandledPromise.applyMethod(parent, peekingProp, argArray));
+        },
+        get(target, p, _receiver) {
+          if (p === 'then') {
+            if (peek) {
+              // Commit to getting the parent property.
+              return harden((...args) =>
+                HandledPromise.get(parent, peekingProp).then(...args),
+              );
+            }
             // Just provide a thenable.
             return harden((...args) => Promise.resolve(parent).then(...args));
           }
-          // Commit to getting the parent property.
-          return harden((...args) =>
-            HandledPromise.get(parent, parentProp).then(...args),
-          );
-        }
 
-        // Symbols are not forwarded, nor are Object.prototype methods.
-        if (typeof p === 'symbol' || p in Object.prototype) {
-          return Reflect.get(target, p);
-        }
+          // Symbols are not forwarded, nor are Object.prototype methods.
+          if (typeof p === 'symbol' || p in Object.prototype) {
+            return Reflect.get(target, p);
+          }
 
-        // Not a method, so use as a property to peek further.
-        const newParent =
-          parentProp === undefined
-            ? parent
-            : HandledPromise.get(parent, parentProp);
-        return EC(newParent, p);
-      },
-      has(_target, p) {
-        // We ensure thenability.
-        return p === 'then';
-      },
-      enumerate(_target) {
-        return ['then'];
-      },
-      deleteProperty(_target, _prop) {
-        return false;
-      },
-    }),
-  );
-});
+          // Not a method, so use as a property to peek further.
+          let newParent = parent;
+          if (peek) {
+            newParent = HandledPromise.get(parent, peekingProp);
+          }
+          return ECPeek(newParent, p);
+        },
+        has(_target, p) {
+          // We ensure thenability.
+          return p === 'then';
+        },
+        enumerate(_target) {
+          return ['then'];
+        },
+        deleteProperty(_target, _prop) {
+          return false;
+        },
+      }),
+    );
+  });
+
+const ECPeek = makeEC(true);
+const EC = makeEC();
+
+export default EC;
