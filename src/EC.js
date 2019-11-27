@@ -23,20 +23,20 @@ ordinarily want to do that right away.
 TODO: Proper hardening and read-only invariants.
 */
 
-export default function DWIM(x, parentProp = undefined) {
+export default harden(function EC(x, parentProp = undefined) {
   const t = () => {};
-  t.toString = harden(() => `[DWIM Proxy]`);
+  t.toString = harden(() => `[Eventual Chain]`);
   return harden(
     new Proxy(harden(t), {
       apply(_target, thisArg, argArray = undefined) {
         // Anonymous function application.
         if (parentProp === undefined) {
-          return DWIM(HandledPromise.applyFunction(x, argArray));
+          return EC(HandledPromise.applyFunction(x, argArray));
         }
 
         if (!thisArg) {
           // Property get followed by function call.
-          return DWIM(
+          return EC(
             HandledPromise.applyFunction(
               HandledPromise.get(x, parentProp),
               argArray,
@@ -45,7 +45,7 @@ export default function DWIM(x, parentProp = undefined) {
         }
 
         // Aggregate as a method call.
-        return DWIM(HandledPromise.applyMethod(x, parentProp, argArray));
+        return EC(HandledPromise.applyMethod(x, parentProp, argArray));
       },
       get(target, p, _receiver) {
         if (p === 'then') {
@@ -67,7 +67,7 @@ export default function DWIM(x, parentProp = undefined) {
         // Not a method, so use as a property to peek further.
         const x2 =
           parentProp === undefined ? x : HandledPromise.get(x, parentProp);
-        return DWIM(x2, p);
+        return EC(x2, p);
       },
       has(_target, p) {
         // We ensure thenability.
@@ -81,4 +81,4 @@ export default function DWIM(x, parentProp = undefined) {
       },
     }),
   );
-}
+});
