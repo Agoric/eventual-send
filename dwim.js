@@ -40,7 +40,7 @@ export default function DWIM(x) {
     get(_target, p, _receiver) {
       if (p === 'then') {
         // Register callbacks on our chain.
-        return Promise.resolve(x).then;
+        return (...args) => Promise.resolve(x).then(...args);
       }
       // eslint-disable-next-line no-use-before-define
       return DWIMPeek(x, p);
@@ -49,12 +49,21 @@ export default function DWIM(x) {
 }
 
 function DWIMPeek(x, propName) {
-  return new Proxy(harden({}), {
+  return new Proxy(harden(() => {}), {
     has(_target, p) {
       // We ensure thenability.
       return p === 'then';
     },
-    apply(_target, _thisArg, argArray = undefined) {
+    apply(_target, thisArg, argArray = undefined) {
+      if (!thisArg) {
+        // Property get followed by function call.
+        return DWIM(
+          HandledPromise.applyFunction(
+            HandledPromise.get(x, propName),
+            argArray,
+          ),
+        );
+      }
       // Convert to a method call.
       return DWIM(HandledPromise.applyMethod(x, propName, argArray));
     },
@@ -62,7 +71,7 @@ function DWIMPeek(x, propName) {
       // Commit to looking up propName.
       if (p === 'then') {
         // Provide Thenable for propName.
-        return HandledPromise.get(x, propName).then;
+        return (...args) => HandledPromise.get(x, propName).then(...args);
       }
       // Continue the chain with a new propName.
       return DWIMPeek(HandledPromise.get(x, propName), p);
