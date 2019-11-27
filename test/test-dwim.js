@@ -56,6 +56,7 @@ test('DWIM readonly', async t => {
     t.throws(() => delete a1.then, 'delete fails');
 
     const a2 = a1.fooBar;
+    // eslint-disable-next-line new-cap
     t.throws(() => new a2(), TypeError, 'cannot construct');
     t.isNot(+a2, +a2, 'no valueof intercept');
     t.equals(String(a2), '[DWIM Proxy]', 'no toString intercept');
@@ -70,4 +71,3 @@ test('DWIM readonly', async t => {
     t.end();
   }
 });
-
