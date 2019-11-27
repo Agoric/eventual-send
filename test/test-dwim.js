@@ -1,5 +1,5 @@
 import test from 'tape-promise/tape';
-import E from '../dwim';
+import E from '../src/dwim';
 
 test('DWIM method calls', async t => {
   try {

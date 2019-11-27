@@ -1,4 +1,4 @@
-import { HandledPromise } from './src';
+import { HandledPromise } from '.';
 
 const harden = Object.freeze;
 
@@ -9,21 +9,23 @@ If we ever do `.then` on a DWIM proxy, it behaves as if it were
 a Thenable for the result thus far.
 
 Disambiguates method calls from eventual get by looking ahead one
-operation.  If next operation is an apply, it's a method call.  If
-it's a property get, then the prior was a get.
+operation.  If it's a property get, then the prior was a get.  If
+it's an apply with a thisArg, treat as a method call.  If it's an
+apply with no thisArg (`(1, DWIM(x).fn)(arg)`), treat as a separate
+property get and anonymous function invocation.
 
 await DWIM(x).method(arg, arg2).foo.bar.baz(123);
 
-This mechanism means the last property get in a chain is postponed
-until .then is called, but we would ordinarily want to do that
-right away.
+This mechanism means that if a chain ends in a property get,
+that get is postponed until `.then` is called, but we would
+ordinarily want to do that right away.
 
 TODO: Proper hardening and read-only invariants.
 */
 export default function DWIM(x) {
   return new Proxy(harden({}), {
-    has(target, p) {
-      // Always a Thenable.
+    has(_target, p) {
+      // Always just a Thenable.
       return p === 'then';
     },
     set(_target, _p, _value, _receiver) {
