@@ -59,11 +59,9 @@ export default function DWIM(x, parentProp = undefined) {
           );
         }
 
-        // We act enough like a function that prototype methods are not
-        // forwarded.
-        const val = Reflect.get(target, p);
-        if (typeof p === 'symbol' || typeof val === 'function') {
-          return val;
+        // Symbols are not forwarded, nor are Object.prototype methods.
+        if (typeof p === 'symbol' || p in Object.prototype) {
+          return Reflect.get(target, p);
         }
 
         // Not a method, so use as a property to peek further.

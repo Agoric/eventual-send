@@ -42,6 +42,23 @@ test('DWIM chains', async t => {
   }
 });
 
+test('DWIM local evaluation', async t => {
+  try {
+    const a = E(num => `foo${num}`);
+    await t.rejects(a.apply(null, [123]), TypeError, 'no apply method');
+    t.equals(
+      await Function.apply.apply(a, [null, [987]]),
+      'foo987',
+      'prototype call succeeds',
+    );
+    t.equals(await a(123), 'foo123', 'explicit call succeeds');
+  } catch (e) {
+    t.isNot(e, e, 'unexpected exception');
+  } finally {
+    t.end();
+  }
+});
+
 test('DWIM readonly', async t => {
   try {
     const a1 = E({});
